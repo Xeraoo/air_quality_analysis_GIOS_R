@@ -1,0 +1,1197 @@
+---
+title: "Projekt : Analiza danych jakości powietrza z bazy Głównego Inspektoratu Ochrony Środowiska"
+subtitle: "Autorzy: Tymoteusz Maj, Wiktor Kondrak"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: 
+    html_document:
+      theme: darkly
+      highlight: zenburn
+      toc: true
+      toc_float: true
+      collapsed: false
+      smooth_scroll: false
+      number_sections: false
+      toc_depth: 3
+      self_contained: true
+      code_folding: NULL
+---
+<script>
+   $(document).ready(function() {
+     $head = $('#header');
+      });
+</script>
+
+<style type="text/css"> 
+body { font-size: 14px; text-align: justify ; color: white} code.r{ font-size: 14px;} pre { font-size: 14px} 
+h1   { font-size: 24px;} h2 { font-size: 22px;} h3 { font-size: 20px;} 
+</style>
+
+```{r Setwd dla projektu, include=FALSE}
+#Ustalenie lokalizacji projektu
+
+setwd("G:/III Semestr/Metodyka badań i analiz środowiskowych/Mateusz Rzeszutek, dr inż/Projekt/Projekt")
+getwd()
+
+```
+
+```{r Instalacja Bibliotek, eval=FALSE, include=FALSE}
+#Instalacja wszystkich potrzebnych bibliotek 
+
+install.packages("readr")
+install.packages("nycflights13")
+install.packages("tidyverse")
+install.packages("tibble")
+install.packages("ggplot2")
+install.packages("dplyr")
+install.packages("Hmisc")
+install.packages("extrafont")
+install.packages("ggrepel")
+install.packages("dichromat")
+install.packages("PogromcyDanych")
+install.packages("plotly")
+install.packages("prettydoc")
+install.packages("ggthemes")
+install.packages("openxlsx")
+install.packages("DT")
+install.packages("openair")
+install.packages("worldmet")
+install.packages("pastecs")
+install.packages("forecast")
+install.packages("corrplot")
+install.packages("utils")
+install.packages("purrr")
+install.packages("stringr")
+install.packages("leaflet")
+install.packages("janitor")
+devtools::install_github("mrzeszut/giosimport")
+if(!require(devtools)) {install.packages("devtools"); require(devtools)}
+```
+
+```{r Biblioteki load, include=FALSE}
+#Wczytanie wszystkich Bibliotek uzytych w projekcie
+
+library(readr)
+library(stringr)
+library(leaflet)
+library(purrr)
+library(nycflights13)
+library(tidyverse)
+library(tibble)
+library(ggplot2)
+library(dplyr)
+library(Hmisc)
+library(extrafont)
+library(janitor)
+library(ggrepel)
+library(dichromat)
+library(PogromcyDanych)
+library(plotly)
+library(openxlsx)
+library(prettydoc)
+library(ggthemes)
+library(DT)
+library(openair)
+library(worldmet)
+library(pastecs)
+library(forecast)
+library(corrplot)
+library(utils)
+library(devtools)
+library(giosimport)
+```
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = F, message = F, error = F, fig.align = "center", cache = T)
+```
+
+***
+# 1. Cel
+***
+
+  Celem przedmiotowego ćwiczenia jest zapoznanie się studentów z pakietem *giosimport*, w celu analizy danych dotyczących jakości powietrza pod kątem stężenie pyłu PM 10 ,  oraz PM 2.5. Wykorzystane przez nas dane będą niejako surowe. Aby prawidłowo wykonac zlecone nam zadanie musielismy zapoznac sie z formatem danych, poznać narzędzia które ułatwią nam pracę oraz ich przetwarzanie. Musieliśmy dokonać analizy statystycznej danych aby okreslic panujące trendy oraz w celu zauważenia zależności między poszczególnymi danymi. Zaznajomić się z normami prawnymi dotyczącymi Oceny Jakości Powietrza w Polsce, normami funkcjonowania stacji, oraz dopuszczalnymi normami zanieczyszczenia pyłami PM10 oraz PM 2.5.  Ostatnim aspektem naszej pracy, było napisanie sprawozdania technicznego z wykonanengo przez nas ćwiczenia przy pomocy RMarkdown, w celu udokumentowania naszej pracy w języku R. 
+  
+
+***
+# 2. R (język programowania)
+***
+
+**R** - interpretowany jezyk programowania oraz srodowisko do obliczen statystycznych. Stosowany jest w analizie szeroko rozumianych danych środowiskowych i przestrzennych oraz ich wizualizacji.
+Podobny jest do języka i środowiska S stworzonego w Bell Laboratories przez Johna Chambersa i jego współpracowników. R jako implementacja języka S została stworzona przez Roberta Gentlemana i Rossa Ihakę na uniwersytecie w Auckland. Nadaje się on świetnie do interaktywnej pracy z danymi, ponieważ połączono w nim wybrane cechy języków funkcyjnych oraz obiektowych.
+
+*[Źródlo](https://pl.wikipedia.org/wiki/R_(język_programowania))*
+
+***
+# 3. R Markdown
+***
+
+**R Markdown** - jest formatem pliku stworzonym do sporzadzania dynamicznych dokumentow z wykorzystaniem R. Plik typu Markdown jest pisany w specyficzny dla siebie sposob, który zaklada bardzo latwa edycje tekstu oraz implementowanie w nim fragmentow kodu (chunki zawierajace kod z poleceniami w jezyku R). R Markdown jest bardzo wygodna metoda formatowania plikow HTML, PDF i dokumentow MS Word.
+
+*[Źródlo](https://rmarkdown.rstudio.com/articles_intro.html)*
+
+***
+# 3. giosimport
+***
+
+Celem pakietu **giosimport** jest pobieranie i wczytywanie danych z Portal Jakości Powietrza GIOŚ. Teoretycznie dane te mają jednorodną strukturę i ich wczytanie powinno być dość proste. Niestety w tych danych wielokrotnie pojawiają się różnego rodzaju nieścisłości, które uniemożliwiały stosowanie prostych i przejrzystych rozwiązań. Kod projektu stawał się bardzo długi, a spora jego część skupiała się na pozyskaniu danych i przekonwertowaniu ich do wygodnej formy pracy. 
+
+Funkcje zawarte w pakiecie tworzą plikową bazę danych na dysku lokalnym. Cała baza danych może zajmować prawie 700 MB. Istnieje możliwość pobierania tylko wybranych części plikowej bazy danych. W tym przypadku dane są pobierane dla każdego roku oddzielnie. Dostępne dane historyczne nie są aktualizowane, więc wystarczy je pobrać tylko raz. Warto umieścić je w odpowiedniej lokalizacji, by nie powielać pobierania danych. 
+
+*[Źródlo](https://rpubs.com/rzeszut/giosimport)*
+*[Źródlo](https://github.com/mrzeszut)*
+
+***
+# 4. Portal Jakość Powietrza GIOŚ
+***
+
+Inspekcja Ochrony Środowiska jest powołana do kontroli przestrzegania przepisów o ochronie środowiska oraz badania i oceny stanu środowiska. W skład Inspekcji wchodzą: **Główny Inspektorat Ochrony Środowiska (GIOŚ)** oraz 16 wojewódzkich inspektoratów ochrony środowiska. Działalnością Inspekcji kieruje Główny Inspektor Ochrony Środowiska
+
+Monitoring jakości powietrza w ramach Państwowego Monitoringu Środowiska (PMŚ) koordynowany i prowadzony jest zgodnie z ustawą z dnia 10 lipca 1991 r. o Inspekcji Ochrony Środowiska przez Głównego Inspektora Ochrony Środowiska.
+
+Monitoring jakości powietrza obejmuje zadania związane z badaniem i oceną stanu zanieczyszczenia powietrza, w tym pomiary i oceny jakości powietrza w strefach, monitoring tła miejskiego pod kątem WWA, pomiary stanu zanieczyszczenia powietrza pyłem PM2,5 dla potrzeb monitorowania procesu osiągania krajowego celu redukcji narażenia, pomiary stanu zanieczyszczenia powietrza metalami ciężkimi i WWA oraz rtęcią w stanie gazowym na stacjach monitoringu tła regionalnego, pomiary składu chemicznego pyłu PM2,5, monitoring prekursorów ozonu; programy badawcze dotyczące zjawisk globalnych i kontynentalnych wynikające z podpisanych przez Polskę konwencji ekologicznych.
+
+Celem funkcjonowania monitoringu jakości powietrza, zgodnie z art. 23 ust. 11 pkt  1  ustawy  z  dnia  20  lipca  1991  r.  o Inspekcji Ochrony Środowiska, jest uzyskiwanie  informacji i danych dotyczących poziomów substancji w otaczającym powietrzu oraz  wyników analiz i ocen w zakresie przestrzegania norm jakości powietrza.  
+
+*[Źródlo](https://powietrze.gios.gov.pl/pjp/content/about_us)*
+
+***
+## 4.1 Charakterystyka stacji 
+***
+
+Wybraliśmy stacje na położoną na terenie miasta Kielce. Stacja znajduje się na ul. Targowej 3. Jej kod krajowy to SkKielTargow, a międzynarodowy to PL0704A. Stacja jest aktywna od 2018-07-01. Znajduje się na wysokości 269 m.n.p.m. Jest to stacja miejska która zajmuje się monitorowaniem stanu powietrza w mieście. Właścicielem jest Główny Inspektorat Ochrony Środowiska.
+
+```{r Mapa_Stacji, include=TRUE}
+getMeta(site = "PL0704A", lat = 50.878998, lon = 20.633692, end.year = "current", plot = T, returnMap = T )
+
+
+```
+***
+## 4.2 Ocena kryteriów lokalizacji stacji
+***
+
+Ocena kryteriów lokalizacji punktów pomiarowych została wykonana na podstawie rozporządzenia Ministra Klimatu i Środowiska z dnia 11 grudnia 2020 r. w sprawie dokonywania oceny poziomów substancji w powietrzu.
+
+![](G:/III Semestr\Metodyka badań i analiz środowiskowych\Mateusz Rzeszutek, dr inż\Projekt\Projekt\Obrazy\Ustawa.png)
+
+*SkKielTargow:*
+
+![](G:/III Semestr\Metodyka badań i analiz środowiskowych\Mateusz Rzeszutek, dr inż\Projekt\Projekt\Obrazy\Typ_Stacji.png)
+
+
+
+Typ stacji - tło
+
+Typ obszaru - miejski
+
+-przepływ powietrza wokół czerpni nie został w żaden sposób ograniczony przeszkodami, które by go utrudniały,
+
+-wlot czerpni zlokalizowany jest w odległości co najmniej kilku metrów od budynków, drzew czy innych przeszkód,
+
+-pomiary są reprezentatywne dla obszaru o powierzchni co najmniej kilku km2 (tło miejskie),
+
+-czerpnia znajduje się na wysokości w przedziale od 1,5 do 4 metrów powyżej poziomu gruntu,
+
+
+
+![Stacja SkKielTargow: ](G:/III Semestr\Metodyka badań i analiz środowiskowych\Mateusz Rzeszutek, dr inż\Projekt\Projekt\Obrazy\SkKielTargow.png)
+
+
+
+
+*SkJedrMieszkMOB:*
+
+![](G:/III Semestr\Metodyka badań i analiz środowiskowych\Mateusz Rzeszutek, dr inż\Projekt\Projekt\Obrazy\Typ_Stacji.png)
+
+
+Typ stacji - tło
+
+Typ obszaru - miejski
+
+-przepływ powietrza wokół czerpni nie został w żaden sposób ograniczony przeszkodami, które by go utrudniały,
+
+-wlot czerpni zlokalizowany jest w odległości co najmniej kilku metrów od budynków, drzew czy innych przeszkód,
+
+-pomiary są reprezentatywne dla obszaru o powierzchni co najmniej kilku km2 (tło miejskie),
+
+-czerpnia znajduje się na wysokości w przedziale od 1,5 do 4 metrów powyżej poziomu gruntu,
+
+![Stacja SkJedrMieszkMOB: ](G:/III Semestr\Metodyka badań i analiz środowiskowych\Mateusz Rzeszutek, dr inż\Projekt\Projekt\Obrazy\SkJedrMieszkMOB.png)
+Obie stacje dostarczają danych z obszarów stref o najwyższych poziomach substancji w powietrzu, na które ludność będzie narażona przez okres odpowiedni do okresu uśredniania wyników pomiarów, dla którego określono poziomy dopuszczalne, poziomy docelowe lub poziomy celów długoterminowych substancji w powietrzu.
+
+***
+# 5. Przystosowanie giosimport
+***
+
+***
+## 5.1 Instalacja pakietu
+***
+
+Nasza pracę z wykonaniem przedmiotowego ćwiczenia, rozpoczeliśmy od zainstalowania repozytorium zgodnie z materiałem dołączonym do zajęć. Skorzystaliśmy w tym celu z repozytorium stworzonego na ptorzeby zajęć oraz umieszczonego na portalu [github](https://github.com/mrzeszut). Aby tego dokonać musieliśmy posłużyć się również pakietem devtools, który pobrał repozytorium oraz zainstalował je na naszym komputerze. W tym celu skrozystaliśmy z poniższych poleceń:
+
+```{r Instalacja_pakietu_GIOSIMPRT, include=TRUE}
+
+devtools::install_github("mrzeszut/giosimport")
+library(giosimport)
+
+```
+
+Instalacja wykonała się poprawnie, dzięki czemu mogliśmy przystąpić do poznawania pakietu oraz przygotowywania naszych danych, w celu użycia ich w dalszej częsci przedmiotowego projektu. 
+
+***
+## 5.2 Metadane
+***
+
+Pracę z pakietem giosimport, rozpoczeliśmy od ustalenia katalogu dostępu dla plików naszego projektu, w celu oszczędzenia miejsca na głównych dyskach komputera, aby nie spowalniać procesu obliczeniowego, oraz aby wszyskie użyteczne dane znajdowały się w łatwym do zlokalizowania miejscu. Katalog dostępu ustaliliśmy poniższym poleceniem:
+
+```{r Ustalenie_Sciezki_dostepu, include=TRUE}
+kat_dost <- "G:/III Semestr/Metodyka badań i analiz środowiskowych/Mateusz Rzeszutek, dr inż/Projekt/Projekt/gios_airbase"
+
+```
+
+Po ustaleniu katalogu dostepu dla naszego projektu, postanowilismy wczytać dane dotyczące stacji jakości powietrza, aby tego dokonać skorzystaliśmy z funkcji:
+
+```{r Wczytanie_Metadanych, include=TRUE}
+
+metadane <- gios_metadane(type = "stacje", 
+                      download = F,    
+                      path = kat_dost, 
+                      mode = "wb")
+```
+
+
+Przy jej pomocy udało nam się do zleconego katalogu pobrać plik binarny, który następnie został wczytant do danych *metadane*, z których będziemy korzystać w późniejszym etapie naszej pracy.
+
+Aby odczytać podstawowe informacje o pobranych przez nas danych posłużymy się ramką danych, dzięki niej z łatwością będziemy mogli odczytać informacje o stacjach, takie jak: kod pocztowy, typ, rodzaj oraz lokalizację.
+
+```{r Ramka_Metadanych, include=TRUE}
+
+dplyr::glimpse(metadane)
+
+```
+
+W celu lepszego zobrazowania rozmieszczenai stacji skorzystaliśmy z funkcji *gios_vis*, która generuje interaktywną mapę lokalizacji stacji. Każda stacja ma przypisaną etykietę w postaci kodu stacji.
+
+```{r Aktywne_Stacje, include=TRUE}
+
+gios_vis(data = metadane %>% filter(is.na(data.zamkniecia)))
+
+```
+
+***
+## 5.3 Stanowiska pomiarowe
+***
+
+Dodatkowym aspektem, z którego możemy skorzystać korzystając z pakietu giosimport jest funkcja umożliwiająca pobranie danych o stanowiskach pomiarowych. Dane te są istostna dla nas, gdyż zawierają informacje o tym jakie substancje są mierzone na każdej z stacji.
+
+```{r Stanowiska_pomiarowe, include=TRUE}
+
+stanowiska <- gios_metadane(type = "stanowiska", 
+                            download = F,  
+                            path = kat_dost, 
+                            mode = "wb")
+
+```
+
+Ponownie dla lepszego zobrazowania danych, posłużyliśmy się ramką danych:
+
+```{r Stanowiska_Ramka_Danych, include=TRUE}
+
+dplyr::glimpse(stanowiska)
+```
+
+Następnym krokiem którego się podjeliśmy było wyselekcjonowanie tylko tych stanowisk które zajmują się pomiarem substancji pyłu *PM10*, oraz pomiar wykonywany jest metodą automatyczną. 
+
+```{r Identyfikacja_Stanowisk, include=TRUE}
+identyfikacja <- stanowiska %>% 
+  filter(`wskaznik.-.kod` == "PM10") %>% 
+  filter(typ.pomiaru =="automatyczny") %>% 
+  pull(kod.stacji)
+```
+
+Przy pomocy funkcji **gios_vis** stworzyliśmy mapę przedstawiająca te stacje na mapie polski. 
+
+```{r Filtorowanie_Metadancyh, include=TRUE}
+
+gios_vis(data = metadane %>% 
+    filter(is.na(data.zamkniecia),             
+           kod.stacji %in% identyfikacja))  
+```
+
+***
+## 5.4 Statystyki podstawowe
+***
+
+Statystyki podstawowe można pozyskać za pomocą **gios_metadane**.Przy użyciu tego polecenia otrzymujemy plik statystyk z lat 2000-2018. W pliku tym znajdują się wszystkie niezbędne miary statystyczne potrzebne nam w późniejszym etapie do przeprowadzenia oceny jakości powietrza w wybranej przez nas stacji. Aby tego dokonać skorzystaliśy z poniższej listy poleceń:
+
+```{r Statystyki_podstawowe, include=TRUE}
+statystyki_podstawowe <- gios_metadane(type = "statystyki", 
+                            download = F, 
+                            path = kat_dost, 
+                            mode = "wb")
+
+
+```
+
+Pobrane dane dostarczają nam informacji na temat "
+
+
+```{r nazwa_substancji, include=TRUE}
+
+names(statystyki_podstawowe)
+```
+
+Dla lepszego przedstawienia ich, postanowiliśmy pokazać je w sposób bardziej czytelny niż tylko wypisanie nazw substancji:
+
+```{r Statystyki_podglad, include=TRUE}
+statystyki_podstawowe[["PM10"]] %>% glimpse()
+
+datatable(statystyki_podstawowe[["PM10"]] %>% glimpse())
+```
+
+
+Pozyskane dane można bardzo łatwo zwizualizować za pomocą pakietu, który poznalisy rozpoczynając swoją przygodę z językiem R, a mianowicie przy pomocy bibliotegki **ggplot2**. Postanowiliśy przy jego pomocy podobnie jak w przedmiotowym konspekcie wyselekcjonować stężenia średnioroczne pyłu zawieszonego PM10 oblczione na podstawie danych pozyskanych przy zastosowaniu metody grawimetrycznej w mieście Kielcach - obszar naszej analizy. 
+
+```{r Wizualizacja_Statystyk, include=TRUE}
+
+statystyki_podstawowe[["PM10"]] %>%
+  filter(Czas.uśredniania == "24g", 
+         Nazwa.strefy == "miasto Kielce") %>% 
+  ggplot(., aes(x = Rok, 
+                y = Średnia, 
+                fill = Kod.stacji),
+         color = "black") +
+  geom_col(position = position_dodge2(0.2)) + 
+  facet_wrap(~Kod.stacji) + 
+  theme_bw() + 
+  theme(legend.position = "top", 
+        legend.direction = "horizontal") +
+  labs(x = openair::quickText("Średnie roczne stężenie pyłu zawieszonego PM10 [ug/m3]"),
+       fill = "kod")
+
+```
+
+***
+## 5.5 Pobieranie plikowej bazy danych
+***
+
+Funkcję *gios_download* zastosowaliśmy aby pobrać całą plikową bazę danych przy pomocy jednego polecenia. Zastosowane polecenie pozwoliło pobrać nam archiwum plików z *Banku danych lokalnych* portalu <powietrze.gios.gov.pl>.
+
+Głównymi argumentami funkcji są url oraz rok. Wartości tych argumentów przedstawia poniższa tabela, która jest zapisana w pakiecie jako obiekt zrodlo.
+
+
+```{r Bank_Danych_lokalnych_Portalu, include=TRUE}
+
+zrodlo %>% knitr::kable()
+
+```
+
+Poniższy przykład obrazuje, jak pobrać dane dla wybranego roku, w tym przypadku 2021 r. Gdzie 21 to indeksy wiersza, a indeksy 1 i 2 oznaczają kolumny obiektu zrodlo. Utworzyliśmy również obiekt wyjściowy, którym jest wektor pliki_2021. Zawiera on listę nazw plików znajdujących się w folderze gios_airbase w kat_dost.
+
+```{r Pobranie_Danych_2020, include=TRUE}
+
+pliki_2020 <- gios_download(url = zrodlo[21,1], 
+                            rok = zrodlo[21,2], 
+                            path = kat_dost, 
+                            mode = "wb") 
+
+```
+
+Wektor pliki, możomy utworzyć w dowolnym momencie. Nie musimy pobierać drugi raz bazy dnaych, by utworzyć ten plik.
+
+```{r Wektor_Pliki, include=TRUE}
+
+pliki_2020 <- dir(paste0(kat_dost, "/2020"))
+
+```
+
+Zastosowana poniżej fukcja map2() jest pętlą która wykonuje polecenie dla kolejnych argumentów funkcji gios_downland(). W poniższym przykładzie argumentami funkcji są odpowiednio .x = url, i .y = rok. Czyli za .x podstawiamy listę adresów url, które dostępne są w obiekcie zrodlo[,2], a za .y podstawiamy argument rok, który dostępnmy jest w obiekcie żródlo[,2], pozostałe arguemnty są stałe. 
+
+*[Źródlo](https://rpubs.com/rzeszut/giosimport)*
+
+```{r pliki_all, include=TRUE}
+
+pliki_all <- map2(.x = as.list(zrodlo[,1]), 
+                  .y = as.list(zrodlo[,2]), 
+                  .f = gios_download, 
+                  path = kat_dost,
+                  mode = "wb")
+```
+
+Następnym krokiem, który wykonalismy było utworzenie pliku nazw plików danych, wykonaliśy to przy pomocy jednego polecenia zleconego w przemdiotowym konspekcie:
+
+```{r pliki_nazw, include=TRUE}
+
+wek <- 2000:2020 %>% 
+  as.character() %>% 
+  paste0(kat_dost, "/", .)
+
+pliki_all <- map(.x = wek, 
+                 .f = dir)
+
+```
+
+W obiekcie pliki_all znajduje sie lista plików. W celu łatwiejszgo rozróżnienia postanowiliśmy każdy z elementów nadpisać aby łatwiej wyselekcjonować rok który nas interesuje.
+
+```{r indeksowanie_roku, include=TRUE}
+
+names(pliki_all) <- paste0("R",zrodlo[,2])
+
+names(pliki_all)
+
+pliki_all$R2020[pliki_all$R2020 %>% str_detect("PM10")]
+
+pliki_2020 <- pliki_all$R2020
+
+```
+
+***
+## 5.6 Wczytywanie i porządkoweanie danych
+***
+
+Napisana poniżej funkcja zakłada, że dane 1g i 24g będą wczytywane niezależnie. Sprawdzimy działanie naszej funkcji wczytując arkusz zawierającyy informacje stężenia średniodobowych PM10. W powyższym zestawie danych będą dla tych samych lokalizacji dostępne zarówno dane 1-g o 24-g dla pyłów zawieszonych i pyłów PM10.
+
+*[Źródlo](https://rpubs.com/rzeszut/giosimport)*
+
+```{r Wczytanie_PM10, include=TRUE}
+
+pm10_2020 <- gios_read(nazwa = "2020_PM10_24g.xlsx",
+                       czas_mu = "24g", 
+                       path = kat_dost)
+
+pm10_1h_2020 <- gios_read(nazwa = "2020_PM10_1g.xlsx",
+                           czas_mu = "1g", 
+                           path = kat_dost)
+
+
+```
+
+Przy pomocy powyższej funkcji możemy wczytać wszystkie dane 1-godzinne lub 24-godzinne za pomocą pętli map_df(). Najpierw jednak musimy zdefiniować listę plików, którą chcemy wczytać. Funkcja str_detect() wykrywa tylko te pliki, które posiadają w nazwie człon 24g lub 1g.
+
+*[Źródlo](https://rpubs.com/rzeszut/giosimport)*
+
+```{r definicja24h, include=TRUE}
+
+n_data_24h <-  map_df(.x =  pliki_2020[str_detect(pliki_2020, "24g")], 
+                  .f = gios_read, 
+                  czas_mu = "24g",
+                  path = kat_dost)
+
+n_data_1h <-  map_df(.x =  pliki_2020[str_detect(pliki_2020, "1g")], 
+                  .f = gios_read, 
+                  czas_mu = "1g",
+                  path = kat_dost)
+
+```
+
+Teraz zmienimy układ danych na szeroki, tak by stężenia każdej substancji znajdowały się w osobnej kolumnie. Taki ukłąd jest bardzo wygodny w przypadku wykonywania analizy danych z pakietem openair.
+
+*[Źródlo](https://rpubs.com/rzeszut/giosimport)*
+
+```{r Zmiana_Ukladu_na_Szeroki, include=TRUE}
+
+n_data_24h <- n_data_24h %>% 
+  spread(key = sub, value = obs)
+
+n_data_1h <- n_data_1h %>% 
+  spread(key = sub, value = obs)
+
+```
+
+```{r n_data_24h_wyswietl, include=TRUE}
+
+n_data_24h %>% select(kod, date, SO2, NO2, PM10, PM2.5)
+
+n_data_1h %>% select(kod, date, SO2, NO2, PM10, PM2.5)
+
+```
+
+Z reguły pojedyńczy zestaw danych dla wybranego roku to za mało. Gdy interesują nas realacje zachodzące pomiedzy poszczególnymi danymi potrzebujemy danych z znacznie dłuzszego okresu czasu.
+
+W obiekcie pliki_all znajdują się nazwy wszystkich plików zawartych w bazie danych. Najpierw wykonalismy filtorwanie nazw plików, które chcemy wczytać, a następnie wczytamy dane.
+
+
+
+*[Źródlo](https://rpubs.com/rzeszut/giosimport)*
+
+```{r PM10_co_1h_selekcja, include = TRUE}
+
+pliki_1h_pm10 <- map(.x = pliki_all, 
+                    .f = ~ .[str_detect(., pattern = "PM10_1g")]) %>% 
+  flatten_chr() 
+
+pliki_24h_pm10 <- map(.x = pliki_all, 
+                    .f = ~ .[str_detect(., pattern = "PM10_24g")]) %>% 
+  flatten_chr() 
+
+
+```
+
+```{r Podglad_Listy, include=TRUE}
+
+pliki_1h_pm10
+
+pliki_24h_pm10
+
+```
+
+Po odczytwaniu interesujących nas danych dokonalisy ich selekcji. 
+
+```{r Selekcja_PM10_1h, include=TRUE}
+
+PM10_1h <- map_df(.x = pliki_1h_pm10, 
+               .f = gios_read, 
+               czas_mu = "1g", 
+               path = kat_dost)
+
+```
+
+```{r Poczatek_Koniec_danych, include=TRUE}
+
+PM10_1h %>% head()
+
+PM10_1h %>% tail()
+
+
+```
+
+Po takim odczytaniu danych wiedzieliśmy jednak, że funkcja nie identyfikuje starych i nowych kodów stacji. Wprowadzenie takiego rozwiązania wiazało by się z każdorazowym wczytywanie metadanych, co znacząco wydłużyło by działanie funkcji w trakcie wczytywania wielu plików. W celu zrozumienia tego problemu wykonalisy sprawdzenie kodu.stacji zlokalizowanych w Kielcach, aby wybrać interesujacą nas stacje.
+
+```{r Sprawdzenie_Kodow_Stacji, include=TRUE}
+
+test <- unique(PM10_1h$kod)
+test[str_detect(test, "SkKiel")]
+
+```
+
+Nowe kody zostały wprowadzone w 2015 roku i nie pokrywają się z nazwami poprzednich. Ponadto niektóre stacje na których nie jest już prowadzony monitoring nie mają przypisanych nowych kodów.
+
+W celu wyelminowania tego problemy napisano funkcje gios_kody, która uzgadania nazewnictwo kodow stacji.
+
+```{r Uzgodnienie_Nazwenictwa, include=TRUE}
+
+PM10_1h_uzgodnione <- gios_kody(data = PM10_1h, meta = metadane)
+
+```
+
+Porównajmy kody stacji:
+
+```{r Porownanie_Kodow_Stacji, include=TRUE}
+
+unique(PM10_1h$kod) %>% .[str_detect(., "SkKiel")] #Pierwotne
+
+unique(PM10_1h$kod) %>% .[str_detect(., "SkKiel")] #Ujedonolicne
+
+PM10_1h_skKielTargow <- PM10_1h %>% filter(kod == "SkKielTargow")
+
+datatable(PM10_1h_skKielTargow)
+
+```
+
+***
+## 5.7 Wyselekcjonowanie interesujacych nas danych
+***
+
+Aby nasza praca i analiza danych przebeigała w sposób bardziej usystematyzowany postanowilismy dokonać szeregu selekcji oraz dołączenia do siebie danych, aby posługiwać się mniejszą ilością zmiennych. Uznalismy że takie roziązanie znacznie ułatwi naszą pracę, gdyż nie zgubimy po drodze pewnej zmiennej. Selekcję rozpoczęliśmy od wyselekcjonowania naszych danych zgodnie z kodem wybranej przez nas stacji :
+
+```{r Wyselekcjonowanie_Danych, include=TRUE}
+
+
+data_1h <- n_data_1h$kod %>% unique()
+data_1h[str_detect(data_1h, pattern =  "SkKielTargow")]
+
+data_24h <- n_data_24h$kod %>% unique()
+data_24h[str_detect(data_24h, pattern =  "SkKielTargow")]
+
+n_data_1h <- n_data_1h %>%
+  filter(kod %in% data_1h)
+
+n_data_24h <- n_data_24h %>%
+  filter(kod %in% data_24h)
+
+n_data_24h %>% timeAverage(avg.time = "year", type = "kod") -> pods24
+n_data_1h %>% timeAverage(avg.time = "year", type = "kod") -> pods1
+
+
+n_data_1h %>% 
+  select(date, kod, PM10) %>%
+  timeAverage(avg.time = "day", type = "kod")
+
+n_data_24h %>% select(date, kod, PM10)
+
+
+```
+
+Zobaczmy teraz nasze dane:
+
+```{r datatable_n_data, include=TRUE}
+
+datatable(n_data_1h)
+
+datatable(n_data_24h)
+
+```
+
+
+```{r Selekcja_Stacji, include=TRUE}
+pm10_1h_2020 <- gios_read(nazwa = "2020_PM10_1g.xlsx",
+                       czas_mu = "1g", 
+                       path = kat_dost)
+
+pm10_24h_2020 <- gios_read(nazwa = "2020_PM10_24g.xlsx",
+                       czas_mu = "24g", 
+                       path = kat_dost)
+
+pm10_1h_2020_stacja <-  pm10_1h_2020 %>%  filter(kod == "SkKielTargow") 
+pm10_24h_2020_stacja <- pm10_24h_2020 %>% filter(kod == "SkKielTargow")
+
+
+```
+
+```{r datatable_stacje, include=TRUE}
+
+datatable(pm10_1h_2020_stacja)
+
+datatable(pm10_24h_2020_stacja)
+
+```
+
+***
+## 5.8 Łączenie danych
+***
+
+Aby połączyć nasze dane skorzystaliśmy z polecenia *left_join*, dzięki temu otrzymaliśmy następujące dane:
+
+```{r Łączenie_Danych, include=TRUE}
+
+left_join(n_data_1h %>%
+            select(date, kod, PM10) %>%
+            timeAverage(avg.time = "day", type = "kod"),
+          n_data_24h %>% select(date, kod, PM10),
+          by = c("date", "kod")) -> dane
+
+left_join(n_data_1h %>%
+            select(date, kod, PM10, NO2, PM2.5, SO2) %>%
+            timeAverage(avg.time = "day", type = "kod"),
+          n_data_24h %>% select(date, kod, PM10, NO2, PM2.5, SO2),
+          by = c("date", "kod", "PM10", "NO2", "PM2.5", "SO2")) -> dane_all
+
+```
+
+***
+## 5.9 Wyselekcjonowanie danych dla SkKielTargow
+***
+
+Zauważyliśmy, że niestety nasze poprzednie kroki nie działały idealnie tak jakbyśmy, tego chcieli. Dlatego postanowiliśmy dokonać selekcji danych dotyczących pyłu PM10 oraz PM2.5 dla naszej stacji w bieżącym roku aby zawęzić zakres danych. To działanie rozpoczęliśy od sprawdzenia kodów stacji :
+
+```{r Kody_stacji, include=TRUE}
+
+PM10n <- gios_kody(data = pm10_2020, meta = metadane)
+
+PM10n
+
+```
+
+Kiedy już tego dokonalisy postanowiliśmy dokończyć naszą selekcję:
+
+```{r SkKielTargow, include=TRUE}
+
+pm10_2020_skKiel <- dane %>% filter(kod == "SkKielTargow") 
+
+datatable(pm10_2020_skKiel)
+
+pm10_2020_skKiel_1H <- PM10_1h_skKielTargow %>% filter(date >= as.Date("2020-01-01") & 
+                                                     date <= as.Date("2021-01-01"))
+
+datatable(pm10_2020_skKiel_1H)
+
+
+
+```
+
+***
+# 6. Metodyka
+***
+
+Zgodnie z art. 89 ust. 1 ustawy Prawo ochrony środowiska na podstawie wyników pomiarów prowadzonych na stacjach Państwowego Monitoringu Środowiska GIOŚ (w tym Regionalne Wydziały Monitoringu Środowiska GIOŚ) co roku, w terminie do 30 kwietnia, dokonuje oceny jakości powietrza w danym województwie za poprzedni rok kalendarzowy. Wyniki ocen publikowane są w formie wojewódzkich raportów dostępnych na portalu Jakość Powietrza GIOŚ w zakładce Publikacje na podstronach wojewódzkich. Wyniki ocen GIOŚ przekazuje zarządowi województwa, który  opracowuje i wdraża program ochrony powietrza w województwie dla  stref, w których zanotowano przekroczenia norm jakości powietrza.
+
+Główny Inspektor Ochrony Środowiska na podstawie rocznych ocen jakości powietrza wykonanych przez RWMŚ wykonuje zbiorczą ocenę jakości powietrza.
+
+W rocznej ocenie jakości powietrza uwzględnia się substancje, dla których w prawie krajowym i w dyrektywach unijnych określono normatywne stężenia w postaci poziomów dopuszczalnych/docelowych/celu długoterminowego w powietrzu, ze względu na ochronę zdrowia ludzkiego i ochronę roślin.
+
+W ocenach prowadzonych pod kątem spełnienia kryteriów ustanowionych w celu ochrony zdrowia ludzi obecnie uwzględnia się: dwutlenek siarki (SO2), dwutlenek azotu (NO2), tlenek węgla (CO), benzen (C6H6), ozon (O3), pył PM10 i PM2,5 (dla pyłu PM2,5 w ocenie za 2020 rok,  zgodnie z rozporządzeniem Ministra Środowiska z dn. 24 sierpnia 2012 r. w sprawie poziomów niektórych substancji w powietrzu, obowiązywać będzie poziom dopuszczalny 20 µg/m3), metale ciężkie: ołów (Pb), arsen (As), kadm (Cd) i nikiel (Ni) w pyle PM10 oraz benzo(a)piren (B(a)P) w pyle PM10. Oceny dokonywane pod kątem spełnienia kryteriów odniesionych do ochrony roślin obejmują: dwutlenek siarki (SO2), tlenki azotu (NOx) i ozon (O3).
+
+*[Źródlo](https://powietrze.gios.gov.pl/pjp/content/measuring_air_assessment_rating_info)*
+
+***
+# 7. Kryteria Lokalizacji Stacji GIOŚ
+***
+
+ Kryteria lokalizacji stanowisk pomiarowych określają przepisy rozporządzenia Ministra Środowiska z dnia 11 grudnia 2020 r. w sprawie dokonywania oceny poziomów substancji w powietrzu, w szczególności zał. nr 2 i 3 (Dz.U. z 2020 r. poz. 2279). O lokalizacji stacji pomiarowych i ich programie pomiarowym decyduje GIOŚ. Na potrzeby ustalenia odpowiedniego sposobu oceny w poszczególnych strefach, w tym liczby stacji, ich zakresu pomiarowego i lokalizacji, GIOŚ przeprowadza w ramach Państwowego Monitoringu Środowiska (PMŚ) tzw. wieloletnie oceny jakości powietrza zgodnie z art. 88 ust. 2 ustawy z dnia 27 kwietnia 2001 r. – Prawo ochrony środowiska (Dz. U. z 2020 r., poz. 1219 z późn. zm.). W celu uzyskania informacji m.in. o przestrzennym rozkładzie stężeń poszczególnych zanieczyszczeń pomiary mogą być uzupełnianie o wyniki modelowania matematycznego rozprzestrzeniania się zanieczyszczeń.
+ 
+ Dane ze stacji pomiarowych gromadzone są w krajowej bazie danych JPOAT2,0 Głównego Inspektoratu Ochrony Środowiska. Bezpłatne przeglądanie i pobieranie danych pomiarowych z bazy JPOAT2,0 dostępne jest za pomocą wyszukiwarki w Banku danych pomiarowych Portalu „Jakość  Powietrza”.
+
+*[Źródlo](https://powietrze.gios.gov.pl/pjp/content/measuring_air_assessment_measurings)*
+
+***
+# 8. Metody pomiaru zanieczyszczenia powietrza
+*** 
+
+Inspekcja Ochrony Środowiska bada zawartość pyłu zawieszonego PM10 i PM2,5 w powietrzu  stosując dwie uzupełniające się metody:
+
+- metodę grawimetryczną (referencyjną), która jest uznana i stosowana na świecie jako najbardziej precyzyjna metoda pomiaru;
+
+- metodę automatyczną, posiadającą wykazaną równoważność do metody referencyjnej.
+
+***
+## 8.1 Metoda grawimetryczna
+*** 
+
+W tej metodzie używa się tzw. poborników pyłowych, specjalnych urządzeń, do których zasysane jest powietrze atmosferyczne. Co dwa tygodnie do pobornika zakłada się 14 jednorazowych filtrów, które urządzenie zmienia automatycznie co 24 godziny. Każdy filtr posiada swój niepowtarzalny numer identyfikacyjny.
+
+Filtry czyste, przed założeniem do pobornika są kondycjonowane i ważone w laboratorium, umieszczane w specjalnych pojemnikach do transportu, a następnie  transportowane na stację pomiarową i umieszczane w poborniku. Po 14 dniach wszystkie filtry są wyjmowane, umieszczane w specjalnych pojemnikach do transportu i przewożone do laboratorium. W laboratorium filtry są kondycjonowane i ważone po raz drugi, już jako filtry po tzw. ekspozycji. Z różnic mas przed i po ekspozycji filtra, odniesionych do objętości przepływu powietrza w poborniku, wyliczane są stężenia pyłów. Stężania te podawane są w mikrogramach na metr sześcienny [µg/m3].
+
+Zaletą tej metody pomiarowej jest jej bardzo wysoka dokładność. Jedyną  jej wadą jest czas potrzebny na uzyskanie wyników, który wynosi ok. 3 tygodni.
+
+Taką metodą w Polsce, Europie, czy Stanach Zjednoczonych, mierzy się stężenia pyłu zawieszonego. Filtry uzyskane z poborników pyłowych wykorzystywane są również do oznaczania metali ciężkichi wielopierścieniowych węglowodorów aromatycznych, w tym benzo(a)pirenu.
+
+Obecnie w Polsce pomiary metodą grawimetryczną są prowadzone na ok. 180 stanowiskach  pyłu PM10 i ok. 70 stanowiskach pyłu PM2,5.
+
+
+***
+## 8.1 Metoda automatyczna
+*** 
+
+Aby urządzenie do automatycznych pomiarów pyłu zawieszonego dopuszczone zostało do pomiarów, które wykorzystywane będą do celów oceny jakości powietrza, stosowana przez nie metoda pomiarowa musi zostać uznana za metodę równoważną do metodyki referencyjnej. W takim wypadku należy wykazać, iż urządzenie spełnia wymagania równoważności, a wyniki takich badań muszą zostać przedstawione Komisji Europejskiej i zaakceptowane przez nią.
+
+Do pomiarów wykonywanych w ramach Państwowego Monitoringu Środowiska stosuje się mierniki automatyczne, które posiadają certyfikaty potwierdzające ich równoważność z metodą referencyjną. Mierniki te na bieżąco mierzą stężenia pyłu, co umożliwia pokazywanie wyników tych pomiarów w trybie „on-line” na portalach inspekcji ochrony środowiska (GIOŚ i WIOŚ) i w aplikacji GIOŚ „Jakość powietrza w Polsce”. Dane te są aktualizowane co godzinę i, w celu porównania z poziomem dopuszczalnym, przeliczane na wartości średniodobowe.
+
+Obecnie w Polsce pomiary metodą automatyczną są prowadzone na ok. 135 stanowiskach  pyłu PM10 i 45 stanowiskach pyłu PM2,5.
+
+Dane pozyskiwane z mierników automatycznych, które są widoczne „on-line” na portalach i w aplikacji powietrznej GIOŚ, określane są jako dane „surowe”, czyli takie, które nie zostały poddane weryfikacji.
+
+
+*[Źródlo](https://powietrze.gios.gov.pl/pjp/content/show/1000919)*
+
+
+***
+# 9. Ocena jakości powietrza
+*** 
+
+  Naszą analizę postanowiliśmy rozpocząć od utworzenia wykresu rozrzutu  dla poszczegolnych lat, Wykonaliśmy go dla naszej stacji oraz najbliższej stacji w Jędrzejowie, która wykonywała analogiczne pomiary.
+  
+```{r Wykres_rozrzutu, include=TRUE}
+
+dane <- dane %>%
+  na.omit() %>% rename(auto = PM10.x, man = PM10.y)
+
+dane %>%
+   filter(kod == "SkKielTargow" || kod == "SkJedrMieszkMOB") %>%
+  ggplot(aes(auto, man)) +
+    geom_point(pch = 20, size = 2, aes(fill = date, color = date)) +
+  facet_wrap(~kod) +
+  theme_bw() +
+  geom_abline(slope = 1, size = 1, linetype = 1, color = "red") +
+  geom_abline(slope = 0.8, size = 1, linetype = 3, color = "red") +
+  geom_abline(slope = 1.2, size = 1, linetype = 3, color = "red") +
+  labs(title = "Porównanie pomiarów dwoma metodami na wybranych stacjach",
+       x = "PM10 mierzone automatycznie",
+       y = "PM10 mierzowe manualnie") +
+  theme_bw() -> p
+
+p + theme(plot.title= element_text(hjust = 0.5))
+```
+Jak widziemy na powyższych wyrkesach, rozrzut jednostek pomiarowych znajdował się w głównej mierze ponad linią prognozowaną.
+
+Przedstawione wykresy rozrzutu, prezentują różnicę między pomiarami automatycznymi i manualnymi oraz ich odchylenie od średniej. Wyniki metody automatycznej są poprawne, jednak występują z błędem +- 25%, względem wyników referencyjnych, które są mierzone za pomocą techniki pozwalającej na najwierniejsze odwzorowanie rzeczywistego stanu powietrza.
+
+Następnym krokiem, którego dokonaliśmy było przedstawienie na wykresie słupkowych stężeń pyłu PM 10, na wybrancyhc przez nas stacjach. Porównujemy również róznice w pomiarach, by zobaczyć jak dobrze skalibrowane są pomiary automatyczne.
+
+```{r Słupkowy_PM10, include=TRUE}
+  
+dane <- dane %>%
+  mutate(diff = auto - man)
+
+dane %>%
+   filter(kod == "SkKielTargow" || kod == "SkJedrMieszkMOB") %>%
+  ggplot(aes(diff, color = kod, fill = kod)) +
+  geom_histogram(binwidth = 1) +
+  theme_bw() +
+  facet_wrap(~kod) +
+  theme(legend.position = "top", legend.direction = "horizontal") +
+  labs(title = "Wykres odchyleń pomiędzy metodami pomiarowymi",
+       x = "Różnica między metodami pomiarowymi",
+       y = "Ilość obserwacji") +
+  theme_bw() -> p
+
+p + theme(legend.position="bottom",
+          plot.title = element_text(hjust = 0.5))
+```
+Jak widzimy na powżyszym wyrkesie, możemy zauważyć że stacja w Jędzejowie posiada o wiele wyższy zakres od wybranej przez nas stacji w Kielcach. Może to oznaczać że zanieczyszczenie mierzone w tej stacji jest znacznie wyższe od tego mierzonego w Kielcach.
+
+
+Następnym krokiem naszej analizy było utworzenie wykresu gęstości prawdopodobieństwa dla wybranych przez nas stacji. 
+
+```{r Gestosc_prawdopodobienstwa, include=TRUE}
+
+dane %>%
+   filter(kod == "SkKielTargow" | kod == "SkJedrMieszkMOB") %>%
+  ggplot(aes(x = diff)) +
+  geom_histogram(aes(y = ..density..),
+                 binwidth = 1,
+                 fill = "white",
+                 color = "black") +
+  geom_density(alpha = 0.9, fill = "grey60") +
+  geom_vline(aes(xintercept = mean(diff, na.rm = 1)),
+            color = "red",
+            size = 1, linetype = 2) +
+  theme_bw() + 
+  scale_x_continuous(expand = c(0,0)) +
+  scale_y_continuous(expand = c(0,0)) +
+   labs(title = "Wykres funkcji gęstości prawdopodobieństwa",
+         x = "Różnica między metodami pomiarowymi",
+         y = "Gęstość") +
+  theme_bw() -> gest
+
+gest + theme(plot.title = element_text(hjust = 0.5))
+
+```
+
+Uzyskany histogram przedstawia wyniki średnioroczne stężenia pyłu PM10. Wykres przypomina wyglądem rozkład normalny, a wartość średnia jest bardzo bliska zera. Oznacza to, że wyniki średnioroczne są bardzo podobne, a odchylenia od tej średniej bardzo małe.
+
+Następnym krokiem naszej analizy którego dokonaliśmy było utworzeniw wyrkesu przedstawiajacego  poglądowe wykresy zanieczyszczeń dla konkretnych stacji.
+
+```{r Poglądowe_wykesey, include=TRUE}
+dane_all %>%
+  filter(kod == "SkKielTargow" || kod == "SkJedrMieszkMOB") %>%
+  timePlot(pollutant = c("NO2","PM10","PM2.5", "SO2"), type = "kod", date.format = "%Y")
+```
+
+Z łatwością możemy zauważyć,  że  ilośc różnego rodzaju zanieczyszczeń w Staji Kielce znacząco rpzewyższa ilość mierzonych zanieczyszczeń na stacji kontrolenj w Jędrzejowie. Możemy z łatwością zauważyć pomiar NO2, którego nie jesteśmy w stanie dostrzec na drugiej stacji.
+
+Następnie postanowiliśmy sprawdzić  zróżnicowanie stężeń zanieczyszczeń miesięcznie i tygodniowo dla PM10 i PM2.5.
+```{r zroznicowanie, include=TRUE}
+dane_all %>%
+  filter(kod == "SkKielTargow" || kod == "SkJedrMieszkMOB") %>%
+  timeVariation(pollutant = "PM10", group="kod")
+
+dane_all %>%
+  filter(kod == "SkKielTargow" || kod == "SkJedrMieszkMOB") %>%
+  timeVariation(pollutant = "PM2.5", group="kod")
+```
+
+Z powyższego wykresu możemy z łatwością zauważyć jak zmieniało się zanieczyszczenie na wybreanej rpzez nas stacji zgodnie z upływem czasu. 
+
+Aby lepiej przedstawić te wartości żeby lepiej wiedzieć z czym mamy doczynienia postanowiliśmy utworzyć tabelę kwantyli z roku 2020, obrazujące nam zanieczyszczenie pyłami znajdującymi się w powietrzu.
+
+```{r Kwantyle, include=TRUE}
+
+kwantyle_NO2 <- as.data.frame(dane_all$NO2 %>% quantile(., na.rm=T))
+kwantyle_SO2 <- as.data.frame(dane_all$SO2 %>% quantile(., na.rm=T))
+kwantyle_PM10 <- as.data.frame(dane_all$PM10 %>% quantile(., na.rm=T))
+kwantyle_PM2_5 <- as.data.frame(dane_all$PM2.5 %>% quantile(., na.rm=T))
+
+kwantyle <- cbind(kwantyle_NO2,kwantyle_SO2,kwantyle_PM10,kwantyle_PM2_5)
+colnames(kwantyle) <- c("kwantyle NO2","kwantyle SO2","kwantyle PM10","kwantyle PM2.5")
+
+kwantyle <- kwantyle[-c(1,5),]
+
+datatable(kwantyle)
+```
+Z powyżej tabeli z łatwością możemy odczytać interesujący nas kwantyl dla danej substancji.
+
+Kolejnym krokiem naszej analizy było porównanie metod automatycznych i referencyjnych na wybranych stacjach. W celu lepszego zoobrazowania tego zagadnienia postanowiliśMy utworzyć tabelkę przedstawiąjące to kryterium.
+
+```{r Porownanie_danych, include=TRUE}
+
+datatable(dane %>%
+            filter(kod == "SkKielTargow" || kod == "SkJedrMieszkMOB") %>%
+  summarise(sre_a = round(mean(auto, na.rm = T),2),
+            sre_r = round(mean(man, na.rm = T),2),
+            min_a = round(min(auto, na.rm = T),2),
+            min_r = round(min(man, na.rm = T),2),
+            max_a = round(max(auto, na.rm = T),2),
+            max_r = round(max(man, na.rm = T),2)))
+```
+
+***
+# 10. Kompletność danych
+*** 
+
+Aby sprawdzić kompletność naszych danych postanowiliśmy utworzyć nową zmienną przechowującą wyselekcjonowane dane dla wybranej przez nas stacji.
+
+```{r Ponowna_selekcja, include=TRUE}
+
+n_data_1h%>%
+  filter(kod=="SkKielTargow")->n_data_1h_kiel
+
+n_data_24h%>%
+  filter(kod=="SkKielTargow")->n_data_24h_kiel
+
+n_data_1h%>%
+  filter(kod=="SkJedrMieszkMOB")->n_data_1h_jedrzejow
+
+n_data_24h%>%
+  filter(kod=="SkJedrMieszkMOB")->n_data_24h_jedrzejow
+
+```
+
+Sprawdzenie naszej kompletności rozpoczęliśmy od sprawdzenia naszej podstawowej stacji w Kielacach w czasie 1h. Wyniki przedstawiliśMy na wykresie oraz w tabelce:
+
+```{r Kompletnosc_danych_Kielce, include=TRUE}
+
+g_dane_kiel <- n_data_1h_kiel %>% 
+  gather(key = sub, value = obs, PM10) %>%
+  group_by(kod, sub) %>%  
+  summarise(n = n() - sum(is.na(obs)),
+            srednia = mean(obs, na.rm = T)) %>% 
+  filter(n != 0) %>% 
+  mutate(proc = (n/366)*100) %>% 
+  arrange(sub, kod)
+
+dane_kiel_TF <- g_dane_kiel %>% mutate(kompletnosc = if_else(proc >= 90, TRUE, FALSE))
+
+dane_kiel_TF %>% 
+  ggplot(aes(x = sub, y = proc)) +
+  geom_bar(stat='identity', aes(fill=kompletnosc), position = 'dodge', color = 'black') +
+  scale_fill_manual(values = c("green","red"), labels = c("Tak","Nie")) +
+  geom_hline(yintercept = 90, color = 'red', size = 1.5) +
+  labs(title = "Wykres kompletności danych dla stacji SkKielTargow",
+       x = "Substancja",
+       y = "Kompletność danych [%]",
+       fill = "Czy kompletność > 90%?") +
+  theme_bw() -> p
+
+p + theme(legend.position="bottom",
+          plot.title = element_text(hjust = 0.5))
+
+g_dane_kiel %>% knitr::kable()
+
+```
+
+```{r Kompletnosc_danych_Jedrzejow, include=TRUE}
+
+g_dane_jedrzejow <- n_data_1h_jedrzejow %>% 
+  gather(key = sub, value = obs, PM10) %>% 
+  group_by(kod, sub) %>% 
+  summarise(n = n() - sum(is.na(obs)),
+            srednia = mean(obs, na.rm = T)) %>% 
+  filter(n != 0) %>% 
+  mutate(proc = (n/366)*100) %>% 
+  arrange(sub, kod)
+
+dane_jedrzejow_TF <- g_dane_jedrzejow %>% mutate(kompletnosc = if_else(proc >= 90, TRUE, FALSE))
+
+dane_jedrzejow_TF %>% 
+  ggplot(aes(x = sub, y = proc)) +
+  geom_bar(stat='identity', aes(fill=kompletnosc), position = 'dodge', color = 'black') +
+  scale_fill_manual(values = c("red","green"), labels = c("Nie","Tak")) +
+  geom_hline(yintercept = 90, color = 'red', size = 1.5) +
+  labs(title = "Wykres kompletności danych dla stacji SkJedrMieszkMOB",
+       x = "Substancja",
+       y = "Kompletność danych [%]",
+       fill = "Czy kompletność > 90%?") +
+  theme_bw() -> p
+
+p + theme(legend.position="bottom",
+          plot.title = element_text(hjust = 0.5))
+
+g_dane_jedrzejow %>% knitr::kable()
+
+```
+
+Kompletność danych, wszystkich zmierzonych przez stację w Kielcach, jest na poziomie powyżej 99% co pozwala nam na wiarygodne przeanalizowanie jakości powietrza. Natomiast kompletność danych, zmierzonych przez stację w Jędrzejowie jest na bardzo niskim poziomie.
+
+Następnie dokonaliśmy takiej analizy dla danych 24h.
+
+```{r Kompletnosc_Kielce_24, include=TRUE}
+
+g_dane_kiel_24 <- n_data_24h_kiel %>% 
+  gather(key = sub, value = obs, PM10) %>%
+  group_by(kod, sub) %>%  
+  summarise(n = n() - sum(is.na(obs)),
+            srednia = mean(obs, na.rm = T)) %>% 
+  filter(n != 0) %>% 
+  mutate(proc = (n/366)*100) %>% 
+  arrange(sub, kod)
+
+dane_kiel_TF_24 <- g_dane_kiel_24 %>% mutate(kompletnosc = if_else(proc >= 90, TRUE, FALSE))
+
+dane_kiel_TF_24 %>% 
+  ggplot(aes(x = sub, y = proc)) +
+  geom_bar(stat='identity', aes(fill=kompletnosc), position = 'dodge', color = 'black') +
+  scale_fill_manual(values = c("green","red"), labels = c("Tak","Nie")) +
+  geom_hline(yintercept = 90, color = 'red', size = 1.5) +
+  labs(title = "Wykres kompletności danych dla stacji SkKielTargow",
+       x = "Substancja",
+       y = "Kompletność danych [%]",
+       fill = "Czy kompletność > 90%?") +
+  theme_bw() -> p
+
+p + theme(legend.position="bottom",
+          plot.title = element_text(hjust = 0.5))
+
+g_dane_kiel %>% knitr::kable()
+
+```
+
+```{r Kompletnosc_Jedrzejow_24, include=TRUE}
+
+g_dane_jedrzejow_24 <- n_data_24h_jedrzejow %>% 
+  gather(key = sub, value = obs, PM10) %>% 
+  group_by(kod, sub) %>% 
+  summarise(n = n() - sum(is.na(obs)),
+            srednia = mean(obs, na.rm = T)) %>% 
+  filter(n != 0) %>% 
+  mutate(proc = (n/366)*100) %>% 
+  arrange(sub, kod)
+
+dane_jedrzejow_TF_24 <- g_dane_jedrzejow_24 %>% mutate(kompletnosc = if_else(proc >= 90, TRUE, FALSE))
+
+dane_jedrzejow_TF_24 %>% 
+  ggplot(aes(x = sub, y = proc)) +
+  geom_bar(stat='identity', aes(fill=kompletnosc), position = 'dodge', color = 'black') +
+  scale_fill_manual(values = c("red","green"), labels = c("Nie","Tak")) +
+  geom_hline(yintercept = 90, color = 'red', size = 1.5) +
+  labs(title = "Wykres kompletności danych dla stacji SkJedrMieszkMOB",
+       x = "Substancja",
+       y = "Kompletność danych [%]",
+       fill = "Czy kompletność > 90%?") +
+  theme_bw() -> p
+
+p + theme(legend.position="bottom",
+          plot.title = element_text(hjust = 0.5))
+
+g_dane_jedrzejow %>% knitr::kable()
+
+```
+
+Sytuacja z kompletnością danych 24h jest analogiczna jak sytuacja dla danych 1h.
+
+Jeżeli dane występują, mają wysoką kompletność. Dane mają procent kompletności
+powyżej 97% dla każdej substancji w pomiarach 24- godzinnych oraz
+powyżej 96% w pomiarach 1- godzinnych (dla stacji w Kielcach).
+
+Wniosek: Dane mają bardzo dużą kompletność. Można użyć ich do oceny jakości powietrza.
+
+***
+# 11. Ocena dotrzymania poziomów dopuszczalnych dla substancji badanych na wybranych stacjach pomiarowych.
+***
+
+Oceny dokonano według rozporządzenia ministra środowiska w sprawie poziomów niektórych substancji w powietrzu z dnia 24 sierpnia 2012 r.
+
+Obliczono wartości zanieczyszczeń średniorocznych dla pomiarów 24- godzinnych i 1- godzinnych:
+
+```{r Ocena_dotrzymania_PM10, include=TRUE}
+
+#Kielce
+n_data_24h_jedrzejow %>%
+  gather(key = sub, value=obs, 'As(PM10)':SO2)%>%
+  filter(sub=="PM10", obs > 50)%>%
+  group_by(kod, sub)%>%
+  summarise(n= n())
+
+n_data_24h_kiel %>%
+  gather(key = sub, value=obs, 'As(PM10)':SO2)%>%
+  filter(sub=="PM10", obs > 50)%>%
+  group_by(kod, sub)%>%
+  summarise(n= n())
+```
+Ilość przekroczeń średniodobowych w Kielcach wynosi 34 razy, więc spełnia dopuszczalną 
+częstość przekroczeń w roku kalendarzowym, natomiast w Zakopanym ilość przekroczeń 
+wynosi 30, więc spełnia dopuszczalną częstość przekroczeń w roku kalendarzowym. 
+
+```{r Ocena_dotrzymania_No2, include=TRUE}
+n_data_1h_kiel %>%
+  gather(key = sub, value=obs, 'C6H6':SO2)%>%
+  filter(sub=="NO2")%>%
+  group_by(kod, sub)%>%
+  summary(obs)
+
+n_data_1h_kiel %>%
+  gather(key = sub, value=obs, 'C6H6':SO2)%>%
+  filter(sub=="NO2", obs>200)%>%
+  group_by(kod, sub)%>%
+  summarise(n= n())
+```
+Średnioroczny poziom substancji w powietrzu w Kielcach wynosił 24.47 µg/m3.
+Pomiar spełnia kryteria (dopuszczalne: 40 µg/m3).
+
+Jednogodzinne dopuszcza się 200 µg/m3, które według rozporządzenia może zostać 
+przekroczone 18 razy, jednak na naszej stacji nie przekroczono tego poziomu w 
+2020 roku.
+
+```{r Ocena_dotrzymania_Nox, include=TRUE}
+
+n_data_1h_kiel %>%
+  gather(key = sub, value=obs, 'C6H6':SO2)%>%
+  filter(sub=="NOx")%>%
+  group_by(kod, sub)%>%
+  summary(obs)
+```
+Średnioroczny poziom substancji w powietrzu dla Kielc wynosił 38.63 µg/m3. Dopuszczalnym poziomem jest 30 µg/m3, co oznacza, że w 
+2020 roku pomiary na stacji przekroczyły ten poziom.
+
+```{r Ocena_dotrzymania_So2, include=TRUE}
+n_data_1h_kiel %>%
+  gather(key = sub, value=obs, 'C6H6':SO2)%>%
+  filter(sub=="SO2")%>%
+  timeAverage(avg.time = "day", type = "kod")%>%
+  filter(obs>125)%>%
+  summarise(n= n())
+
+n_data_1h_kiel %>%
+  gather(key = sub, value=obs, 'C6H6':SO2)%>%
+  filter(sub=="SO2")%>%
+  timeAverage(avg.time = "day", type = "kod")%>%
+  summary()
+```
+Średniorocznie w porze zimowej poziom substancji w powietrzu w Kielcach wynosi 10,363 µg/m3. Dopuszczalnym poziomem jest 20 µg/m3, co oznacza, że 
+stacja nie przekracza tego poziomu.
+
+Dwutlenek siarki ma dopuszczony jednogodzinny poziom 125 µg/m3, który można 
+przekroczyć do 3 razy. Na naszej stacji nie został on przekroczony w roku 2020. 
+
+***
+# 10. Wnioski
+***
+
+Do badania zawartości pyłu zawieszonego PM10 oraz PM2.5 w powietrzu stosuje się dwie metody, metodę grawimetryczną(refernecyjną) oraz metodę automatyczną. Metoda refernecyjna jest powszechnie uważana za metodę najbardziej skuteczną oraz precyzyjną pod względem wyników pomiarów. W naszej analizie wykonaliśmy parę tabelek oraz wykresów, które wykazują, że metoda automatyczna wcale nie odbiega znacząco od precyzji wykonywania pomiarów jak w przypadku metody manualnej. Możemy zatem stwierdzić, że metoda automatyczna jest równoważna z metodą referencyjną. Dodatkowo wykonując to ćwiczenie poszerzyliśmy swoje umiejętnościz  pisania programów przy użyciu języka R, co w przyszłości znacząco ułatwi nam dokonywanie róznego rodzaju analiz środowiskowych. 
+
+***
+# Bibliografia
+***
+
+1) *A. Szulecka, R. Oleniacz, M. Rzeszutek (2017): Functionality of openair package in air pollution assessment and modeling – a case study of Krakow, Environmental Protection and Natural Resources, 28(2), 22-27. DOI: [10.1515/OSZN-2017-0009](https://www.sciendo.com/article/10.1515/oszn-2017-0009)* (dostep 26.10.2021)
+2) *J.N. Lott: [The Quality Control of the Integrated Surface Hourly database](https://www1.ncdc.noaa.gov/pub/data/inventories/ish-qc.pdf)* (dostep 26.10.2021)
+3) *D.C. Carslaw, K. Ropkins (2012): openair — An R package for air quality data analysis, Environmental Modelling & Software, 27–28(0), 52–61. DOI: [10.1016/j.envsoft.2011.09.008](https://www.sciencedirect.com/science/article/abs/pii/S1364815211002064?via%3Dihub)* (dostep 28.10.2021)
+4) *D.B. Stephenson (2005): Data analysis methods in weather and climate research, [on-line](http://empslocal.ex.ac.uk/people/staff/dbs202/cag/courses/MT37C/course-d.pdf) course* (dostep 28.10.2021)
+5) *https://bookdown.org/yihui/rmarkdown/html-document.html*  (dostep 28.10.2021)
+6) *https://www.datadreaming.org/post/r-markdown-theme-gallery/* (dostep 28.10.2021)
+7) *https://rpubs.com/danapower/577147* (dostep 28.10.2021)
+8) *https://pl.wikipedia.org/wiki/R_(język_programowania)* (dostep 28.10.2021)
+9) *https://bookdown.org/yihui/rmarkdown/* (dostep 28.10.2021)
+10) *https://dane.gov.pl/pl* (dostep 28.10.2021)
+11) *http://pbiecek.github.io/Przewodnik/Programowanie/jak_tworzyc_raporty.html* (dostep 28.10.2021)
+12) *https://tibble.tidyverse.org* (dostep 29.10.2021)
+13) *https://riptutorial.com/pl/r/example/2871/tworzenie-tabeli-danych* (dostep 29.10.2021)
+14) *https://cran.r-project.org/doc/contrib/wprowadzenie_do_R.pdf* (dostep 29.10.2021)
+15) *https://plotly.com/r/* (dostep 01.11.2021)
+16) *https://cran.r-project.org/doc/contrib/Biecek-R-basics.pdf* (dostep 01.11.2021)
+17) *https://rpubs.com/rzeszut/giosimport* (dostep 01.11.2021)
+18) *https://github.com/mrzeszut* (dostep 01.11.2021)
+19) *https://powietrze.gios.gov.pl/pjp/content/about_us* (dostep 01.11.2021)
+20) *https://www.gios.gov.pl/pl/o-urzedzie/zadania-inspekcji-ochrony-srodowiska* (dostep 01.11.2021)
+21) *https://pl.wikipedia.org/wiki/G%C5%82%C3%B3wny_Inspektorat_Ochrony_%C5%9Arodowiska* (dostep 01.11.2021)
+22) *https://github.com/tidyverse/tibble/issues/539*(dostep 15.11.2021)
+23) *https://powietrze.gios.gov.pl/pjp/content/measuring_air_assessment_rating_info* (dostep 05.11.2021)
+24) *https://powietrze.gios.gov.pl/pjp/content/show/1000919* (dostep 07.11.2021)
+
+
+
+
+
+
+
+
+
+
